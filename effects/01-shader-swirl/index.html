@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Domain Warp Shader Swirl — Web Effects</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      width: 100%; height: 100%;
+      background: #070d1a;
+      overflow: hidden;
+    }
+
+    #canvas {
+      display: block;
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* ── HUD overlay ───────────────────── */
+    .hud {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: clamp(1.25rem, 3vw, 2rem);
+    }
+
+    .hud-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .back-btn {
+      pointer-events: all;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: rgba(255,255,255,0.45);
+      text-decoration: none;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      border: 1px solid rgba(255,255,255,0.12);
+      padding: 7px 16px;
+      border-radius: 4px;
+      backdrop-filter: blur(8px);
+      background: rgba(7,13,26,0.4);
+      transition: color 0.2s, border-color 0.2s;
+    }
+
+    .back-btn:hover {
+      color: rgba(255,255,255,0.85);
+      border-color: rgba(255,255,255,0.3);
+    }
+
+    .effect-id {
+      font-family: 'Courier New', monospace;
+      font-size: 11px;
+      letter-spacing: 3px;
+      color: rgba(225, 145, 54, 0.55);
+      text-transform: uppercase;
+    }
+
+    /* bottom info */
+    .hud-bottom {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+
+    .effect-info {
+      max-width: 360px;
+    }
+
+    .effect-name {
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
+      font-size: clamp(1.5rem, 4vw, 2.5rem);
+      font-weight: 700;
+      color: rgba(226, 238, 255, 0.9);
+      line-height: 1.1;
+    }
+
+    .effect-sub {
+      margin-top: 6px;
+      font-size: 14px;
+      color: rgba(122, 155, 196, 0.7);
+      line-height: 1.5;
+    }
+
+    .tech-stack {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 6px;
+    }
+
+    .badge {
+      font-family: 'Courier New', monospace;
+      font-size: 10px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: rgba(18, 117, 216, 0.75);
+      border: 1px solid rgba(18, 117, 216, 0.25);
+      padding: 4px 12px;
+      border-radius: 3px;
+      backdrop-filter: blur(8px);
+      background: rgba(7,13,26,0.35);
+      white-space: nowrap;
+    }
+  </style>
+</head>
+<body>
+
+  <canvas id="canvas"></canvas>
+
+  <div class="hud">
+    <div class="hud-top">
+      <a href="../../index.html" class="back-btn">← Gallery</a>
+      <span class="effect-id">Effect 01 / Shader Swirl</span>
+    </div>
+
+    <div class="hud-bottom">
+      <div class="effect-info">
+        <div class="effect-name">Domain Warp<br>Shader Swirl</div>
+        <div class="effect-sub">FBM 域扭曲 × 藍橙漸層<br>純 WebGL，無任何外部依賴</div>
+      </div>
+      <div class="tech-stack">
+        <span class="badge">WebGL 1.0</span>
+        <span class="badge">GLSL ES 1.0</span>
+        <span class="badge">FBM Noise</span>
+        <span class="badge">Domain Warp</span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('canvas')
+    const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl')
+
+    if (!gl) {
+      document.body.innerHTML =
+        '<p style="color:#e2eeff;text-align:center;padding:4rem;font-family:sans-serif">此瀏覽器不支援 WebGL</p>'
+      throw new Error('WebGL not supported')
+    }
+
+    /* ── Vertex shader ─────────────────── */
+    const VERT = `
+      attribute vec2 a_pos;
+      void main() { gl_Position = vec4(a_pos, 0.0, 1.0); }
+    `
+
+    /* ── Fragment shader ───────────────── */
+    const FRAG = `
+      precision highp float;
+      uniform float u_time;
+      uniform vec2  u_res;
+
+      /* Value noise hash */
+      float hash(vec2 p) {
+        p = fract(p * vec2(234.34, 435.345));
+        p += dot(p, p + 34.23);
+        return fract(p.x * p.y);
+      }
+
+      /* Smooth value noise */
+      float noise(vec2 p) {
+        vec2 i = floor(p);
+        vec2 f = fract(p);
+        vec2 u = f * f * (3.0 - 2.0 * f);
+        return mix(
+          mix(hash(i),             hash(i + vec2(1.0, 0.0)), u.x),
+          mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x),
+          u.y
+        );
+      }
+
+      mat2 rot2(float a) {
+        return mat2(cos(a), sin(a), -sin(a), cos(a));
+      }
+
+      /* fBm — 6 octaves */
+      float fbm(vec2 p) {
+        float v = 0.0, a = 0.5;
+        for (int i = 0; i < 6; i++) {
+          v += a * noise(p);
+          p  = rot2(0.5) * p * 2.0 + vec2(100.0);
+          a *= 0.5;
+        }
+        return v;
+      }
+
+      void main() {
+        vec2 uv = gl_FragCoord.xy / u_res;
+        uv.x   *= u_res.x / u_res.y;          /* aspect-correct */
+
+        float t = u_time * 0.22;
+
+        /* --- Domain warp (3 layers) ---- */
+        vec2 q = vec2(
+          fbm(uv + t * 0.07),
+          fbm(uv + vec2(1.0))
+        );
+
+        vec2 r = vec2(
+          fbm(uv + 1.0 * q + vec2(1.7, 9.2) + 0.14 * t),
+          fbm(uv + 1.0 * q + vec2(8.3, 2.8) + 0.11 * t)
+        );
+
+        float f = fbm(uv + r);
+
+        /* --- Palette ------------------- */
+        vec3 dark   = vec3(0.027, 0.051, 0.102); /* #070d1a */
+        vec3 blue   = vec3(0.071, 0.459, 0.847); /* #1275d8 */
+        vec3 orange = vec3(0.882, 0.569, 0.212); /* #e19136 */
+        vec3 tint   = vec3(0.89,  0.93,  1.00);  /* cool highlight */
+
+        vec3 col = mix(dark,   blue,   clamp(f * f * 4.0,      0.0, 1.0));
+        col      = mix(col,    orange, clamp(length(q) * 0.85, 0.0, 1.0));
+        col      = mix(col,    blue * 1.4, clamp(length(r.x) * 0.55, 0.0, 1.0));
+        col      = mix(col,    tint,   clamp(f * 0.12,         0.0, 1.0));
+
+        /* --- Vignette ------------------- */
+        vec2 vig = (gl_FragCoord.xy / u_res) * 2.0 - 1.0;
+        col *= 1.0 - dot(vig, vig) * 0.28;
+
+        gl_FragColor = vec4(col, 1.0);
+      }
+    `
+
+    /* ── Compile & link ─────────────────── */
+    function compileShader(type, src) {
+      const s = gl.createShader(type)
+      gl.shaderSource(s, src)
+      gl.compileShader(s)
+      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+        throw new Error(gl.getShaderInfoLog(s))
+      }
+      return s
+    }
+
+    const program = gl.createProgram()
+    gl.attachShader(program, compileShader(gl.VERTEX_SHADER, VERT))
+    gl.attachShader(program, compileShader(gl.FRAGMENT_SHADER, FRAG))
+    gl.linkProgram(program)
+    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+      throw new Error(gl.getProgramInfoLog(program))
+    }
+    gl.useProgram(program)
+
+    /* ── Full-screen quad ───────────────── */
+    const buf = gl.createBuffer()
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf)
+    gl.bufferData(gl.ARRAY_BUFFER,
+      new Float32Array([-1,-1, 1,-1, -1,1,  -1,1, 1,-1, 1,1]),
+      gl.STATIC_DRAW
+    )
+    const aPos = gl.getAttribLocation(program, 'a_pos')
+    gl.enableVertexAttribArray(aPos)
+    gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0)
+
+    const uTime = gl.getUniformLocation(program, 'u_time')
+    const uRes  = gl.getUniformLocation(program, 'u_res')
+
+    /* ── Resize ─────────────────────────── */
+    function resize() {
+      canvas.width  = window.innerWidth  * devicePixelRatio
+      canvas.height = window.innerHeight * devicePixelRatio
+      gl.viewport(0, 0, canvas.width, canvas.height)
+    }
+    window.addEventListener('resize', resize)
+    resize()
+
+    /* ── Render loop ────────────────────── */
+    const t0 = performance.now()
+    function render() {
+      gl.uniform1f(uTime, (performance.now() - t0) * 0.001)
+      gl.uniform2f(uRes,  canvas.width, canvas.height)
+      gl.drawArrays(gl.TRIANGLES, 0, 6)
+      requestAnimationFrame(render)
+    }
+    render()
+  </script>
+
+</body>
+</html>
