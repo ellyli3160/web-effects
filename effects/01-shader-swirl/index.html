@@ -139,6 +139,7 @@
         <span class="badge">GLSL ES 1.0</span>
         <span class="badge">FBM Noise</span>
         <span class="badge">Domain Warp</span>
+        <span class="badge">Mouse Interaction</span>
       </div>
     </div>
   </div>
@@ -164,6 +165,8 @@
       precision highp float;
       uniform float u_time;
       uniform vec2  u_res;
+      uniform vec2  u_mouse;   /* normalized 0–1, Y flipped for GL */
+      uniform float u_hover;   /* 0 = no mouse on page, 1 = active */
 
       /* Value noise hash */
       float hash(vec2 p) {
@@ -203,6 +206,16 @@
         vec2 uv = gl_FragCoord.xy / u_res;
         uv.x   *= u_res.x / u_res.y;          /* aspect-correct */
 
+        /* --- Mouse influence ----------- */
+        vec2 mouseUV = u_mouse;
+        mouseUV.x   *= u_res.x / u_res.y;     /* same aspect correction */
+        float mDist  = length(uv - mouseUV);
+
+        /* Pull UV slightly toward cursor — "撥動液體" 效果 */
+        float pull   = exp(-mDist * 2.8) * 0.18 * u_hover;
+        vec2  dir    = normalize(mouseUV - uv + vec2(0.0001));
+        uv          += dir * pull;
+
         float t = u_time * 0.22;
 
         /* --- Domain warp (3 layers) ---- */
@@ -228,6 +241,10 @@
         col      = mix(col,    orange, clamp(length(q) * 0.85, 0.0, 1.0));
         col      = mix(col,    blue * 1.4, clamp(length(r.x) * 0.55, 0.0, 1.0));
         col      = mix(col,    tint,   clamp(f * 0.12,         0.0, 1.0));
+
+        /* --- Cursor glow --------------- */
+        float glow = exp(-mDist * 6.5) * 0.55 * u_hover;
+        col += vec3(0.55, 0.75, 1.0) * glow;   /* 淡藍白光暈 */
 
         /* --- Vignette ------------------- */
         vec2 vig = (gl_FragCoord.xy / u_res) * 2.0 - 1.0;
@@ -268,8 +285,22 @@
     gl.enableVertexAttribArray(aPos)
     gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0)
 
-    const uTime = gl.getUniformLocation(program, 'u_time')
-    const uRes  = gl.getUniformLocation(program, 'u_res')
+    const uTime  = gl.getUniformLocation(program, 'u_time')
+    const uRes   = gl.getUniformLocation(program, 'u_res')
+    const uMouse = gl.getUniformLocation(program, 'u_mouse')
+    const uHover = gl.getUniformLocation(program, 'u_hover')
+
+    /* ── Mouse tracking (smooth lerp) ─── */
+    let mx = 0.5, my = 0.5       // smoothed position (normalised)
+    let tx = 0.5, ty = 0.5       // target position
+    let hover = 0, targetHover = 0
+
+    window.addEventListener('mousemove', e => {
+      tx = e.clientX / window.innerWidth
+      ty = 1.0 - e.clientY / window.innerHeight  // flip Y for WebGL
+      targetHover = 1
+    })
+    window.addEventListener('mouseleave', () => { targetHover = 0 })
 
     /* ── Resize ─────────────────────────── */
     function resize() {
@@ -283,8 +314,15 @@
     /* ── Render loop ────────────────────── */
     const t0 = performance.now()
     function render() {
-      gl.uniform1f(uTime, (performance.now() - t0) * 0.001)
-      gl.uniform2f(uRes,  canvas.width, canvas.height)
+      // Smooth lerp — laggy fluid feel
+      mx    += (tx - mx)    * 0.06
+      my    += (ty - my)    * 0.06
+      hover += (targetHover - hover) * 0.08
+
+      gl.uniform1f(uTime,  (performance.now() - t0) * 0.001)
+      gl.uniform2f(uRes,   canvas.width, canvas.height)
+      gl.uniform2f(uMouse, mx, my)
+      gl.uniform1f(uHover, hover)
       gl.drawArrays(gl.TRIANGLES, 0, 6)
       requestAnimationFrame(render)
     }
