@@ -10,7 +10,7 @@
 
 | # | 名稱 | 技術 | 預覽 |
 |---|------|------|------|
-| 01 | Domain Warp Shader Swirl | WebGL · GLSL · FBM | [查看](effects/01-shader-swirl/) |
+| 01 | Domain Warp Shader Swirl | WebGL · GLSL · FBM · Mouse Interaction | [查看](effects/01-shader-swirl/) |
 
 ---
 
@@ -63,6 +63,38 @@ vec3 orange = vec3(0.882, 0.569, 0.212); /* #e19136 — 琥珀橙   */
 float t = u_time * 0.22;  /* 降低係數 → 更慢更沉穩；提高 → 更活躍 */
 ```
 
+#### 游標互動
+
+游標移動時，shader 接收兩個額外 uniform：
+
+| Uniform | 型別 | 說明 |
+|---------|------|------|
+| `u_mouse` | `vec2` | 游標位置，已正規化 0–1，Y 軸翻轉（WebGL 座標系） |
+| `u_hover` | `float` | 0 = 游標不在畫面內，1 = 啟用，用 lerp 平滑過渡 |
+
+**關鍵設計原則**
+
+1. **Gaussian falloff（`exp(-d²)`）而非指數（`exp(-d)`）**
+   - 指數衰減收縮快，游標中心會出現明顯亮點
+   - 高斯衰減邊緣柔和，大範圍漸淡，產生「軟球」感
+
+   ```glsl
+   float blob = exp(-mDist * mDist * 3.2) * u_hover;
+   ```
+
+2. **`mix()` 取代 `+=` 做顏色混合**
+   - 加法（`col += glow`）容易導致顏色過曝、出現白點
+   - `mix()` 只在現有顏色間插值，不增加整體亮度
+
+   ```glsl
+   col = mix(col, blobCol + col * 0.25, blob * 0.48);
+   ```
+
+3. **JavaScript 端用 lerp 讓追蹤有延遲感**
+   ```js
+   mx += (tx - mx) * 0.06   // 值越小 → 延遲越明顯
+   ```
+
 ---
 
 ## 給 AI 的 Prompt 模板
@@ -74,6 +106,7 @@ float t = u_time * 0.22;  /* 降低係數 → 更慢更沉穩；提高 → 更�
 > 幫我寫一個全螢幕 WebGL fragment shader，使用 FBM domain warping（Inigo Quilez 技術）。
 > 效果是有機流動的漸層，顏色從 `[顏色A hex]` 到 `[顏色B hex]`，背景底色 `[底色 hex]`。
 > 使用 6 octaves value noise，3 層 domain warping，速度係數約 0.2（慢速流動）。
+> 加入游標互動：游標靠近時流體被柔和吸引，使用 Gaussian falloff（exp(-d²)）搭配 mix() 混色，不用加法避免白點。
 > 加入 vignette 暗角效果。請提供完整可運行的單一 HTML 檔案，JavaScript 內嵌，不使用任何外部函式庫。
 
 **用 `shaders` npm 套件（React/Next.js）：**
