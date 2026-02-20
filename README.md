@@ -95,11 +95,7 @@ float t = u_time * 0.22;  /* 降低係數 → 更慢更沉穩；提高 → 更�
    mx += (tx - mx) * 0.06   // 值越小 → 延遲越明顯
    ```
 
----
-
-## 給 AI 的 Prompt 模板
-
-### 想做類似 Shader Swirl 效果時
+#### AI Prompt 模板
 
 **完整 WebGL 版（純 HTML，無依賴）：**
 
@@ -117,7 +113,7 @@ float t = u_time * 0.22;  /* 降低係數 → 更慢更沉穩；提高 → 更�
 > 套在 `<Shader>` 容器內。加入 isLoaded state（canvas.width > 0 檢查 + 1.5s fallback）。
 > 底部加線性漸層 fade 到背景色。
 
-### 關鍵詞彙（搜尋/研究用）
+**關鍵詞彙（搜尋/研究用）**
 
 - `GLSL fragment shader gradient` — 著色器漸層基礎
 - `FBM noise shader` — 分形噪聲
@@ -126,11 +122,9 @@ float t = u_time * 0.22;  /* 降低係數 → 更慢更沉穩；提高 → 更�
 - `shadertoy` — 著色器效果參考庫（shadertoy.com）
 - `shaders npm react` — React 封裝版，含 Swirl/ChromaFlow 等元件
 
----
+#### 延伸方向
 
-## 延伸方向
-
-如果想做更多效果，可以考慮：
+如果想從這個效果繼續發展：
 
 - **Voronoi / 細胞噪聲** — 有機晶格/生物感
 - **Ray Marching** — 3D 體積霧/景深
