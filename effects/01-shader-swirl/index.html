@@ -211,10 +211,12 @@
         mouseUV.x   *= u_res.x / u_res.y;     /* same aspect correction */
         float mDist  = length(uv - mouseUV);
 
-        /* Pull UV slightly toward cursor — "撥動液體" 效果 */
-        float pull   = exp(-mDist * 2.8) * 0.18 * u_hover;
-        vec2  dir    = normalize(mouseUV - uv + vec2(0.0001));
-        uv          += dir * pull;
+        /* Gaussian blob — wide soft falloff, no hard center */
+        float blob = exp(-mDist * mDist * 3.2) * u_hover;
+
+        /* Gentle UV pull (derives from blob, so same soft radius) */
+        vec2 dir = normalize(mouseUV - uv + vec2(0.0001));
+        uv      += dir * blob * 0.10;
 
         float t = u_time * 0.22;
 
@@ -242,9 +244,10 @@
         col      = mix(col,    blue * 1.4, clamp(length(r.x) * 0.55, 0.0, 1.0));
         col      = mix(col,    tint,   clamp(f * 0.12,         0.0, 1.0));
 
-        /* --- Cursor glow --------------- */
-        float glow = exp(-mDist * 6.5) * 0.55 * u_hover;
-        col += vec3(0.55, 0.75, 1.0) * glow;   /* 淡藍白光暈 */
+        /* --- Cursor blob color (soft, no white point) --- */
+        /* 用 mix 取代加法，避免過曝白點；顏色偏深藍靛青 */
+        vec3 blobCol = vec3(0.10, 0.25, 0.80);
+        col = mix(col, blobCol + col * 0.25, blob * 0.48);
 
         /* --- Vignette ------------------- */
         vec2 vig = (gl_FragCoord.xy / u_res) * 2.0 - 1.0;
